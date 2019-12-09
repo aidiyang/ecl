@@ -240,7 +240,7 @@ void Ekf::controlExternalVisionFusion()
 				uncorrelateQuatStates();
 
 				// adjust the quaternion covariances estimated yaw error
-				increaseQuatYawErrVariance(sq(fmaxf(_ev_sample_delayed.angErr, 1.0e-2f)));
+				increaseQuatYawErrVariance(fmaxf(_ev_sample_delayed.angVar, sq(1.0e-2f)));
 
 				// calculate the amount that the quaternion has changed by
 				_state_reset_status.quat_change = _state.quat_nominal * quat_before_reset.inversed();
@@ -311,7 +311,10 @@ void Ekf::controlExternalVisionFusion()
 					_ev_pos_innov(1) = _state.pos(1) - _hpos_pred_prev(1) - ev_delta_pos(1);
 
 					// observation 1-STD error, incremental pos observation is expected to have more uncertainty
-					ev_pos_obs_var(0) = ev_pos_obs_var(1) = sq(fmaxf(_ev_sample_delayed.posErr, 0.5f));
+					Matrix3f ev_pos_var = matrix::diag(_ev_sample_delayed.posVar);
+					ev_pos_var = _ev_rot_mat * ev_pos_var * _ev_rot_mat.transpose();
+					ev_pos_obs_var(0) = fmaxf(ev_pos_var(0, 0), sq(0.5f));
+					ev_pos_obs_var(1) = fmaxf(ev_pos_var(1, 1), sq(0.5f));
 				}
 
 				// record observation and estimate for use next time
@@ -322,13 +325,16 @@ void Ekf::controlExternalVisionFusion()
 			} else {
 				// use the absolute position
 				Vector3f ev_pos_meas = _ev_sample_delayed.pos;
+				Matrix3f ev_pos_var = matrix::diag(_ev_sample_delayed.posVar);
 				if (_params.fusion_mode & MASK_ROTATE_EV) {
 					ev_pos_meas = _ev_rot_mat * ev_pos_meas;
+					ev_pos_var = _ev_rot_mat * ev_pos_var * _ev_rot_mat.transpose();
 				}
 				_ev_pos_innov(0) = _state.pos(0) - ev_pos_meas(0);
 				_ev_pos_innov(1) = _state.pos(1) - ev_pos_meas(1);
-				// observation 1-STD error
-				ev_pos_obs_var(0) = ev_pos_obs_var(1) = sq(fmaxf(_ev_sample_delayed.posErr, 0.01f));
+
+				ev_pos_obs_var(0) = fmaxf(ev_pos_var(0, 0), sq(0.01f));
+				ev_pos_obs_var(1) = fmaxf(ev_pos_var(1, 0), sq(0.01f));
 
 				// check if we have been deadreckoning too long
 				if ((_time_last_imu - _time_last_hor_pos_fuse) > _params.reset_timeout_max) {
@@ -354,10 +360,12 @@ void Ekf::controlExternalVisionFusion()
 			Vector2f ev_vel_innov_gates{};
 
 			Vector3f vel_aligned{_ev_sample_delayed.vel};
+			Matrix3f ev_vel_var = matrix::diag(_ev_sample_delayed.velVar);
 
 			// rotate measurement into correct earth frame if required
 			if (_params.fusion_mode & MASK_ROTATE_EV) {
 				vel_aligned = _ev_rot_mat * _ev_sample_delayed.vel;
+				ev_vel_var = _ev_rot_mat * ev_vel_var * _ev_rot_mat.transpose();
 			}
 
 			// correct velocity for offset relative to IMU
@@ -367,9 +375,7 @@ void Ekf::controlExternalVisionFusion()
 			Vector3f vel_offset_earth = _R_to_earth * vel_offset_body;
 			vel_aligned -= vel_offset_earth;
 
-			_ev_vel_innov(0) = _state.vel(0) - vel_aligned(0);
-			_ev_vel_innov(1) = _state.vel(1) - vel_aligned(1);
-			_ev_vel_innov(2) = _state.vel(2) - vel_aligned(2);
+			_ev_vel_innov = _state.vel - vel_aligned;
 
 			// check if we have been deadreckoning too long
 			if ((_time_last_imu - _time_last_hor_vel_fuse) > _params.reset_timeout_max) {
@@ -379,10 +385,8 @@ void Ekf::controlExternalVisionFusion()
 				}
 			}
 
-			// observation 1-STD error
-			ev_vel_obs_var(0) = ev_vel_obs_var(1) = ev_vel_obs_var(2) = sq(fmaxf(_ev_sample_delayed.velErr, 0.01f));
+			ev_vel_obs_var = matrix::max(ev_vel_var.diag(), sq(0.01f));
 
-			// innovation gate size
 			ev_vel_innov_gates(0) = ev_vel_innov_gates(1) = fmaxf(_params.ev_vel_innov_gate, 1.0f);
 
 			fuseHorizontalVelocity(_ev_vel_innov, ev_vel_innov_gates,ev_vel_obs_var, _ev_vel_innov_var, _ev_vel_test_ratio);
@@ -1239,7 +1243,7 @@ void Ekf::controlHeightFusion()
 			// calculate the innovation assuming the external vision observation is in local NED frame
 			_ev_pos_innov(2) = _state.pos(2) - _ev_sample_delayed.pos(2);
 			// observation variance - defined externally
-			ev_hgt_obs_var(2) = sq(fmaxf(_ev_sample_delayed.hgtErr, 0.01f));
+			ev_hgt_obs_var(2) = fmaxf(_ev_sample_delayed.posVar(2), sq(0.01f));
 			// innovation gate size
 			ev_hgt_innov_gate(1) = fmaxf(_params.ev_pos_innov_gate, 1.0f);
 			// fuse height information
