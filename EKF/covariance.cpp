@@ -101,16 +101,7 @@ void Ekf::initialiseCovariance()
 	// record IMU bias state covariance reset time - used to prevent resets being performed too often
 	_last_imu_bias_cov_reset_us = _imu_sample_delayed.time_us;
 
-	// variances for optional states
-
-	// earth frame and body frame magnetic field
-	// set to observation variance
-	for (uint8_t index = 16; index <= 21; index ++) {
-		P[index][index] = sq(_params.mag_noise);
-	}
-
-	// save covariance data for re-use when auto-switching between heading and 3-axis fusion
-	saveMagCovData();
+	resetMagCov();
 
 	// wind
 	P[22][22] = sq(_params.initial_wind_uncertainty);
@@ -864,8 +855,7 @@ void Ekf::fixCovarianceErrors()
 
 	// magnetic field states
 	if (!_control_status.flags.mag_3D) {
-		zeroRows(P, 16, 21);
-		zeroCols(P, 16, 21);
+		zeroMagCov();
 
 	} else {
 		// constrain variances
@@ -899,20 +889,36 @@ void Ekf::fixCovarianceErrors()
 
 void Ekf::resetMagRelatedCovariances()
 {
-	// set the quaternion covariance terms to zero
+	resetQuatCov();
+	resetMagCov();
+}
+
+void Ekf::resetQuatCov(){
+	zeroQuatCov();
+}
+
+void Ekf::zeroQuatCov()
+{
 	zeroRows(P, 0, 3);
 	zeroCols(P, 0, 3);
+}
 
-	// set the magnetic field covariance terms to zero
+void Ekf::resetMagCov()
+{
+	// reset the corresponding rows and columns in the covariance matrix and
+	// set the variances on the magnetic field states to the measurement variance
 	clearMagCov();
 
-	// set the field state variance to the observation variance
-	for (uint8_t rc_index = 16; rc_index <= 21; rc_index ++) {
-		P[rc_index][rc_index] = sq(_params.mag_noise);
+	for (uint8_t index = 16; index <= 21; index ++) {
+		P[index][index] = sq(_params.mag_noise);
 	}
 
-	// save covariance data for re-use when auto-switching between heading and 3-axis fusion
-	saveMagCovData();
+	if (!_control_status.flags.mag_3D) {
+		// save covariance data for re-use when auto-switching between heading and 3-axis fusion
+		// if already in 3-axis fusion mode, the covariances are automatically saved when switching out
+		// of this mode
+		saveMagCovData();
+	}
 }
 
 void Ekf::clearMagCov()

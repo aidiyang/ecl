@@ -496,17 +496,7 @@ bool Ekf::realignYawGPS()
 			// adjust the quaternion covariances estimated yaw error
 			increaseQuatYawErrVariance(sq(asinf(sineYawError)));
 
-			// reset the corresponding rows and columns in the covariance matrix and set the variances on the magnetic field states to the measurement variance
-			clearMagCov();
-
-			if (_control_status.flags.mag_3D) {
-				for (uint8_t index = 16; index <= 21; index ++) {
-					P[index][index] = sq(_params.mag_noise);
-				}
-
-				// save covariance data for re-use when auto-switching between heading and 3-axis fusion
-				saveMagCovData();
-			}
+			resetMagCov();
 
 			// record the start time for the magnetic field alignment
 			_flt_mag_align_start_time = _imu_sample_delayed.time_us;
@@ -534,17 +524,7 @@ bool Ekf::realignYawGPS()
 			// calculate initial earth magnetic field states
 			_state.mag_I = _R_to_earth * _mag_sample_delayed.mag;
 
-			// reset the corresponding rows and columns in the covariance matrix and set the variances on the magnetic field states to the measurement variance
-			clearMagCov();
-
-			if (_control_status.flags.mag_3D) {
-				for (uint8_t index = 16; index <= 21; index ++) {
-					P[index][index] = sq(_params.mag_noise);
-				}
-
-				// save covariance data for re-use when auto-switching between heading and 3-axis fusion
-				saveMagCovData();
-			}
+			resetMagCov();
 
 			// record the start time for the magnetic field alignment
 			_flt_mag_align_start_time = _imu_sample_delayed.time_us;
@@ -693,17 +673,7 @@ bool Ekf::resetMagHeading(const Vector3f &mag_init, bool increase_yaw_var, bool 
 	Dcmf R_to_earth_after(quat_after_reset);
 	_state.mag_I = R_to_earth_after * mag_init;
 
-	// reset the corresponding rows and columns in the covariance matrix and set the variances on the magnetic field states to the measurement variance
-	clearMagCov();
-
-	if (_control_status.flags.mag_3D) {
-		for (uint8_t index = 16; index <= 21; index ++) {
-			P[index][index] = sq(_params.mag_noise);
-		}
-
-		// save covariance data for re-use when auto-switching between heading and 3-axis fusion
-		saveMagCovData();
-	}
+	resetMagCov();
 
 	// record the time for the magnetic field alignment event
 	_flt_mag_align_start_time = _imu_sample_delayed.time_us;

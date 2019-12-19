@@ -779,8 +779,12 @@ private:
 	// initialise the quaternion covariances using rotation vector variances
 	void initialiseQuatCovariances(Vector3f &rot_vec_var);
 
-	// perform a limited reset of the magnetic field state covariances
+	// perform a limited reset of the magnetic field related state covariances
 	void resetMagRelatedCovariances();
+
+	void resetQuatCov();
+	void zeroQuatCov();
+	void resetMagCov();
 
 	// perform a limited reset of the wind state covariances
 	void resetWindCovariance();
